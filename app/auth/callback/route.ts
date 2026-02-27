@@ -6,7 +6,7 @@ export async function GET(request: Request) {
   const code = url.searchParams.get("code");
   const next = url.searchParams.get("next") ?? "/";
 
-  const supabase = supabaseServer();
+  const supabase = await supabaseServer();
 
   if (code) {
     await supabase.auth.exchangeCodeForSession(code);
