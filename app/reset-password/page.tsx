@@ -15,7 +15,41 @@ export default function ResetPasswordPage() {
 
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.auth.getSession();
+      setMsg(null);
+
+      // ✅ Support recovery links that use hash tokens:
+      // e.g. /reset-password#access_token=...&refresh_token=...&type=recovery
+      if (typeof window !== "undefined" && window.location.hash) {
+        const hash = window.location.hash.substring(1);
+        const params = new URLSearchParams(hash);
+
+        const access_token = params.get("access_token");
+        const refresh_token = params.get("refresh_token");
+
+        if (access_token && refresh_token) {
+          const { error } = await supabase.auth.setSession({
+            access_token,
+            refresh_token,
+          });
+
+          if (error) {
+            setMsg("Reset-link is ongeldig of verlopen. Vraag opnieuw een reset aan.");
+            return;
+          }
+
+          // Ruim de hash op (netter + voorkomt hergebruik)
+          window.history.replaceState(null, "", window.location.pathname);
+        }
+      }
+
+      // ✅ Check session (na /auth/callback met ?code=... óf na hash setSession)
+      const { data, error } = await supabase.auth.getSession();
+
+      if (error) {
+        setMsg(error.message);
+        return;
+      }
+
       if (!data.session) {
         setMsg("Reset-link is ongeldig of verlopen. Vraag opnieuw een reset aan.");
       }
