@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
+import { supabaseBrowser } from "@/lib/supabase/client";
 
 export default function ResetPasswordPage() {
-  const supabase = createClient();
+  const supabase = supabaseBrowser();
   const router = useRouter();
 
   const [password, setPassword] = useState("");
@@ -14,14 +14,14 @@ export default function ResetPasswordPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    // Check of er een sessie is (na /auth/callback zou dit true moeten zijn)
     (async () => {
       const { data } = await supabase.auth.getSession();
       if (!data.session) {
         setMsg("Reset-link is ongeldig of verlopen. Vraag opnieuw een reset aan.");
       }
     })();
-  }, [supabase]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -50,12 +50,14 @@ export default function ResetPasswordPage() {
           placeholder="Nieuw wachtwoord"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
+          autoComplete="new-password"
         />
         <input
           type="password"
           placeholder="Herhaal nieuw wachtwoord"
           value={password2}
           onChange={(e) => setPassword2(e.target.value)}
+          autoComplete="new-password"
         />
         <button type="submit" disabled={loading}>
           {loading ? "Opslaan..." : "Wachtwoord opslaan"}
