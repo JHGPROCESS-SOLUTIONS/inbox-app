@@ -45,8 +45,7 @@ export default function LoginPage() {
       return;
     }
 
-    // Optioneel: bij signup kan Supabase email confirmation aanstaan.
-    // In dat geval heb je niet altijd meteen een session.
+    // Als signup email-confirmation aan staat, is er niet altijd direct een sessie
     if (mode === "signup") {
       const { data } = await supabase.auth.getSession();
       if (!data.session) {
@@ -71,9 +70,9 @@ export default function LoginPage() {
 
     setSendingReset(true);
 
+    // ✅ BELANGRIJK: stuur direct naar /reset-password (niet naar /auth/callback)
     const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
-      // Belangrijk: eerst cookies/sessie zetten via server route, daarna naar reset scherm
-      redirectTo: `${window.location.origin}/auth/callback?next=/reset-password`,
+      redirectTo: `${window.location.origin}/reset-password`,
     });
 
     setSendingReset(false);
@@ -97,6 +96,7 @@ export default function LoginPage() {
           onChange={(e) => setEmail(e.target.value)}
           autoComplete="email"
         />
+
         <input
           placeholder="Password"
           type="password"
@@ -112,13 +112,20 @@ export default function LoginPage() {
           {mode === "login" ? "Log in" : "Create account"}
         </button>
 
-        {/* ✅ Wachtwoord vergeten (alleen bij login) */}
+        {/* ✅ Wachtwoord vergeten (altijd zichtbaar in login-mode) */}
         {mode === "login" && (
           <button
             type="button"
             onClick={onForgotPassword}
             disabled={sendingReset}
-            style={{ background: "transparent", border: "none", padding: 0, color: "blue", textAlign: "left" }}
+            style={{
+              background: "transparent",
+              border: "none",
+              padding: 0,
+              color: "blue",
+              textAlign: "left",
+              cursor: "pointer",
+            }}
           >
             {sendingReset ? "Herstelmail versturen..." : "Wachtwoord vergeten?"}
           </button>
