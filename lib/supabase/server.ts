@@ -1,47 +1,36 @@
-// lib/supabase/server.ts
 import "server-only";
-
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 
-export async function createClient() {
-  const cookieStore = await cookies(); // werkt bij sync én async cookies()
+export async function supabaseServer() {
+  const cookieStore = await cookies();
 
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  if (!url || !anon) {
-    throw new Error("Missing Supabase env vars: NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY");
+  if (!url || !anonKey) {
+    throw new Error(
+      "Missing env vars: NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY"
+    );
   }
 
-  return createServerClient(url, anon, {
+  return createServerClient(url, anonKey, {
     cookies: {
-      get(name: string) {
-        return cookieStore.get(name)?.value;
+      getAll() {
+        return cookieStore.getAll();
       },
-      set(name: string, value: string, options: any) {
+      setAll(cookiesToSet) {
         try {
-          cookieStore.set({ name, value, ...options });
+          cookiesToSet.forEach(({ name, value, options }) => {
+            cookieStore.set(name, value, options);
+          });
         } catch {
-          // kan in sommige server contexts (RSC) niet, negeren is ok
-        }
-      },
-      remove(name: string, options: any) {
-        try {
-          cookieStore.set({ name, value: "", ...options, maxAge: 0 });
-        } catch {
-          // idem
+          // In Server Components kan set() niet altijd; in Route Handlers wel.
         }
       },
     },
   });
 }
 
-/**
- * ✅ Belangrijk:
- * Je codebase gebruikt overal `supabaseServer()`.
- * Dus we exporteren die naam ook als alias.
- */
-export async function supabaseServer() {
-  return createClient();
-}
+// Handig alias als je ergens createClient() verwacht:
+export const createClient = supabaseServer;
