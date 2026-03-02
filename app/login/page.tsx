@@ -1,45 +1,56 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/client";
 
 export default function LoginPage() {
   const supabase = supabaseBrowser();
   const router = useRouter();
-  const sp = useSearchParams();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [mode, setMode] = useState<"login" | "signup">("login");
 
-  const [error, setError] = useState<string | null>(sp.get("error"));
+  const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [sendingReset, setSendingReset] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setInfo(null);
+    setLoading(true);
 
     const cleanEmail = email.trim();
     const cleanPassword = password;
 
     if (!cleanEmail || !cleanPassword) {
+      setLoading(false);
       setError("Vul email en wachtwoord in.");
       return;
     }
 
     const res =
       mode === "login"
-        ? await supabase.auth.signInWithPassword({ email: cleanEmail, password: cleanPassword })
-        : await supabase.auth.signUp({ email: cleanEmail, password: cleanPassword });
+        ? await supabase.auth.signInWithPassword({
+            email: cleanEmail,
+            password: cleanPassword,
+          })
+        : await supabase.auth.signUp({
+            email: cleanEmail,
+            password: cleanPassword,
+          });
+
+    setLoading(false);
 
     if (res.error) {
       setError(res.error.message);
       return;
     }
 
+    // Als signup email-confirmation aan staat, is er niet altijd direct een sessie
     if (mode === "signup") {
       const { data } = await supabase.auth.getSession();
       if (!data.session) {
@@ -64,9 +75,11 @@ export default function LoginPage() {
 
     setSendingReset(true);
 
-    // Let op: deze URL moet ook in Supabase Auth -> URL Configuration toegestaan zijn.
+    // In browser-only handler -> safe
+    const redirectTo = `${window.location.origin}/auth/callback?next=/reset-password`;
+
     const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
-      redirectTo: `${window.location.origin}/reset-password`,
+      redirectTo,
     });
 
     setSendingReset(false);
@@ -81,10 +94,6 @@ export default function LoginPage() {
 
   return (
     <div style={{ maxWidth: 360, margin: "80px auto" }}>
-      <div style={{ position: "fixed", top: 8, left: 8, fontSize: 12, color: "green" }}>
-        BUILD: forgot-password-enabled-v2
-      </div>
-
       <h1>{mode === "login" ? "Log in" : "Sign up"}</h1>
 
       <form onSubmit={onSubmit} style={{ display: "grid", gap: 8, marginTop: 16 }}>
@@ -106,7 +115,9 @@ export default function LoginPage() {
         {error && <div style={{ color: "red" }}>{error}</div>}
         {info && <div style={{ color: "green" }}>{info}</div>}
 
-        <button type="submit">{mode === "login" ? "Log in" : "Create account"}</button>
+        <button type="submit" disabled={loading}>
+          {loading ? "Even..." : mode === "login" ? "Log in" : "Create account"}
+        </button>
 
         {mode === "login" && (
           <button
