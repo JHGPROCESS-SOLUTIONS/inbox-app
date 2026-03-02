@@ -1,26 +1,47 @@
-import { NextResponse } from "next/server";
-import { supabaseServer } from "@/lib/supabase/server";
+// lib/supabase/server.ts
+import "server-only";
 
-export async function GET(request: Request) {
-  const url = new URL(request.url);
+import { cookies } from "next/headers";
+import { createServerClient } from "@supabase/ssr";
 
-  // Supabase stuurt meestal ?code=... terug (PKCE)
-  const code = url.searchParams.get("code");
+export async function createClient() {
+  const cookieStore = await cookies(); // werkt bij sync én async cookies()
 
-  // Waar willen we naartoe?
-  const next = url.searchParams.get("next") ?? "/";
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-  const supabase = await supabaseServer();
-
-  if (code) {
-    // Zet de sessie in cookies (belangrijk voor /reset-password & middleware)
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
-    if (error) {
-      // Als exchange faalt: terug naar login met fout
-      return NextResponse.redirect(new URL(`/login?error=${encodeURIComponent(error.message)}`, url.origin));
-    }
+  if (!url || !anon) {
+    throw new Error("Missing Supabase env vars: NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY");
   }
 
-  // Redirect naar reset-password of home
-  return NextResponse.redirect(new URL(next, url.origin));
+  return createServerClient(url, anon, {
+    cookies: {
+      get(name: string) {
+        return cookieStore.get(name)?.value;
+      },
+      set(name: string, value: string, options: any) {
+        try {
+          cookieStore.set({ name, value, ...options });
+        } catch {
+          // kan in sommige server contexts (RSC) niet, negeren is ok
+        }
+      },
+      remove(name: string, options: any) {
+        try {
+          cookieStore.set({ name, value: "", ...options, maxAge: 0 });
+        } catch {
+          // idem
+        }
+      },
+    },
+  });
+}
+
+/**
+ * ✅ Belangrijk:
+ * Je codebase gebruikt overal `supabaseServer()`.
+ * Dus we exporteren die naam ook als alias.
+ */
+export async function supabaseServer() {
+  return createClient();
 }
