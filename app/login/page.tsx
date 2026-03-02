@@ -70,9 +70,9 @@ export default function LoginPage() {
 
     setSendingReset(true);
 
-    // ✅ BELANGRIJK: stuur direct naar /reset-password (niet naar /auth/callback)
+    // ✅ BELANGRIJK: via /auth/callback zodat server cookies/sessie kan zetten
     const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
-      redirectTo: `${window.location.origin}/reset-password`,
+      redirectTo: `${window.location.origin}/auth/callback?next=/reset-password`,
     });
 
     setSendingReset(false);
@@ -87,6 +87,11 @@ export default function LoginPage() {
 
   return (
     <div style={{ maxWidth: 360, margin: "80px auto" }}>
+      {/* ✅ Debug label om zeker te weten dat je de nieuwste build ziet */}
+      <div style={{ position: "fixed", top: 8, left: 8, fontSize: 12, color: "green" }}>
+        BUILD: forgot-password-enabled-v2
+      </div>
+
       <h1>{mode === "login" ? "Log in" : "Sign up"}</h1>
 
       <form onSubmit={onSubmit} style={{ display: "grid", gap: 8, marginTop: 16 }}>
@@ -108,11 +113,9 @@ export default function LoginPage() {
         {error && <div style={{ color: "red" }}>{error}</div>}
         {info && <div style={{ color: "green" }}>{info}</div>}
 
-        <button type="submit">
-          {mode === "login" ? "Log in" : "Create account"}
-        </button>
+        <button type="submit">{mode === "login" ? "Log in" : "Create account"}</button>
 
-        {/* ✅ Wachtwoord vergeten (altijd zichtbaar in login-mode) */}
+        {/* ✅ Wachtwoord vergeten */}
         {mode === "login" && (
           <button
             type="button"
