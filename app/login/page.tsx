@@ -1,18 +1,19 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/client";
 
 export default function LoginPage() {
   const supabase = supabaseBrowser();
   const router = useRouter();
+  const sp = useSearchParams();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [mode, setMode] = useState<"login" | "signup">("login");
 
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(sp.get("error"));
   const [info, setInfo] = useState<string | null>(null);
   const [sendingReset, setSendingReset] = useState(false);
 
@@ -31,21 +32,14 @@ export default function LoginPage() {
 
     const res =
       mode === "login"
-        ? await supabase.auth.signInWithPassword({
-            email: cleanEmail,
-            password: cleanPassword,
-          })
-        : await supabase.auth.signUp({
-            email: cleanEmail,
-            password: cleanPassword,
-          });
+        ? await supabase.auth.signInWithPassword({ email: cleanEmail, password: cleanPassword })
+        : await supabase.auth.signUp({ email: cleanEmail, password: cleanPassword });
 
     if (res.error) {
       setError(res.error.message);
       return;
     }
 
-    // Als signup email-confirmation aan staat, is er niet altijd direct een sessie
     if (mode === "signup") {
       const { data } = await supabase.auth.getSession();
       if (!data.session) {
@@ -70,9 +64,9 @@ export default function LoginPage() {
 
     setSendingReset(true);
 
-    // ✅ BELANGRIJK: via /auth/callback zodat server cookies/sessie kan zetten
+    // Let op: deze URL moet ook in Supabase Auth -> URL Configuration toegestaan zijn.
     const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
-      redirectTo: `${window.location.origin}/auth/callback?next=/reset-password`,
+      redirectTo: `${window.location.origin}/reset-password`,
     });
 
     setSendingReset(false);
@@ -87,7 +81,6 @@ export default function LoginPage() {
 
   return (
     <div style={{ maxWidth: 360, margin: "80px auto" }}>
-      {/* ✅ Debug label om zeker te weten dat je de nieuwste build ziet */}
       <div style={{ position: "fixed", top: 8, left: 8, fontSize: 12, color: "green" }}>
         BUILD: forgot-password-enabled-v2
       </div>
@@ -115,7 +108,6 @@ export default function LoginPage() {
 
         <button type="submit">{mode === "login" ? "Log in" : "Create account"}</button>
 
-        {/* ✅ Wachtwoord vergeten */}
         {mode === "login" && (
           <button
             type="button"
