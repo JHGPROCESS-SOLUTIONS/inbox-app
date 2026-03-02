@@ -4,89 +4,79 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/client";
 
-function parseHash(hash: string) {
-  const h = hash.startsWith("#") ? hash.slice(1) : hash;
-  const params = new URLSearchParams(h);
-  return {
-    access_token: params.get("access_token"),
-    refresh_token: params.get("refresh_token"),
-    type: params.get("type"),
-  };
-}
-
 export default function ResetPasswordPage() {
-  const supabase = supabaseBrowser();
   const router = useRouter();
-  const sp = useSearchParams();
+  const searchParams = useSearchParams();
+
+  // Maak supabase client 1x stabiel
+  const supabase = useMemo(() => supabaseBrowser(), []);
 
   const [password, setPassword] = useState("");
   const [password2, setPassword2] = useState("");
+
   const [msg, setMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [ready, setReady] = useState(false);
 
-  const code = useMemo(() => sp.get("code"), [sp]);
-
   useEffect(() => {
+    // In sommige setups komt Supabase recovery met hash params (#access_token=...)
+    // In anderen met query params (?code=...)
+    // Wij crashen niet als er niks is: we tonen gewoon een duidelijke melding.
     (async () => {
       setMsg(null);
 
-      // 1) Als Supabase met ?code= komt: eerst via /auth/callback sessie-cookies zetten
-      if (code) {
-        router.replace(`/auth/callback?next=/reset-password`);
-        return;
-      }
+      try {
+        // 1) Als er een "code" in query zit (PKCE flow), wissel die om naar session
+        const code = searchParams?.get("code");
+        if (code) {
+          const { error } = await supabase.auth.exchangeCodeForSession(code);
+          if (error) {
+            setMsg("Reset-link is ongeldig of verlopen. Vraag opnieuw een reset aan.");
+            setReady(true);
+            return;
+          }
+        }
 
-      // 2) Als Supabase met #access_token=... komt: sessie zetten in browser
-      const { access_token, refresh_token, type } = parseHash(window.location.hash);
-
-      if (type === "recovery" && access_token && refresh_token) {
-        const { error } = await supabase.auth.setSession({
-          access_token,
-          refresh_token,
-        });
-
-        if (error) {
+        // 2) Check of we nu een session hebben (recovery session)
+        const { data } = await supabase.auth.getSession();
+        if (!data.session) {
           setMsg("Reset-link is ongeldig of verlopen. Vraag opnieuw een reset aan.");
-          setReady(false);
+          setReady(true);
           return;
         }
 
-        // hash opruimen (netjes)
-        window.history.replaceState({}, document.title, window.location.pathname);
         setReady(true);
-        return;
+      } catch (e) {
+        setMsg("Er ging iets mis bij het laden van de reset-pagina. Probeer opnieuw.");
+        setReady(true);
       }
-
-      // 3) Check: bestaat er al een sessie?
-      const { data } = await supabase.auth.getSession();
-      if (!data.session) {
-        setMsg("Reset-link is ongeldig of verlopen. Vraag opnieuw een reset aan.");
-        setReady(false);
-        return;
-      }
-
-      setReady(true);
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [code, router]);
+  }, [supabase, searchParams]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setMsg(null);
 
-    if (password.length < 8) return setMsg("Wachtwoord moet minimaal 8 tekens zijn.");
-    if (password !== password2) return setMsg("Wachtwoorden komen niet overeen.");
-    if (!ready) return setMsg("Reset-sessie is niet actief. Open de reset-link opnieuw.");
+    if (password.length < 8) {
+      setMsg("Wachtwoord moet minimaal 8 tekens zijn.");
+      return;
+    }
+    if (password !== password2) {
+      setMsg("Wachtwoorden komen niet overeen.");
+      return;
+    }
 
     setLoading(true);
     const { error } = await supabase.auth.updateUser({ password });
     setLoading(false);
 
-    if (error) return setMsg(error.message);
+    if (error) {
+      setMsg(error.message);
+      return;
+    }
 
     setMsg("Wachtwoord bijgewerkt. Je wordt doorgestuurd…");
-    setTimeout(() => router.replace("/inbox"), 600);
+    setTimeout(() => router.replace("/login"), 800);
   }
 
   return (
@@ -94,28 +84,38 @@ export default function ResetPasswordPage() {
       <h1>Nieuw wachtwoord instellen</h1>
 
       {!ready ? (
-        <p style={{ marginTop: 12 }}>{msg ?? "Reset-link controleren..."}</p>
-      ) : (
-        <form onSubmit={onSubmit} style={{ display: "grid", gap: 12, marginTop: 16 }}>
-          <input
-            type="password"
-            placeholder="Nieuw wachtwoord"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            autoComplete="new-password"
-          />
-          <input
-            type="password"
-            placeholder="Herhaal nieuw wachtwoord"
-            value={password2}
-            onChange={(e) => setPassword2(e.target.value)}
-            autoComplete="new-password"
-          />
-          <button type="submit" disabled={loading}>
-            {loading ? "Opslaan..." : "Wachtwoord opslaan"}
+        <p>Even laden…</p>
+      ) : msg && msg.includes("ongeldig") ? (
+        <div>
+          <p style={{ color: "red" }}>{msg}</p>
+          <button type="button" onClick={() => router.replace("/login")}>
+            Terug naar login
           </button>
-          {msg && <p style={{ marginTop: 12 }}>{msg}</p>}
-        </form>
+        </div>
+      ) : (
+        <>
+          <form onSubmit={onSubmit} style={{ display: "grid", gap: 12, marginTop: 16 }}>
+            <input
+              type="password"
+              placeholder="Nieuw wachtwoord"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="new-password"
+            />
+            <input
+              type="password"
+              placeholder="Herhaal nieuw wachtwoord"
+              value={password2}
+              onChange={(e) => setPassword2(e.target.value)}
+              autoComplete="new-password"
+            />
+            <button type="submit" disabled={loading}>
+              {loading ? "Opslaan..." : "Wachtwoord opslaan"}
+            </button>
+          </form>
+
+          {msg && <p style={{ marginTop: 12, color: msg.includes("bijgewerkt") ? "green" : "red" }}>{msg}</p>}
+        </>
       )}
     </div>
   );
